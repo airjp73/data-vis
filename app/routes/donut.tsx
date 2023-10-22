@@ -138,8 +138,6 @@ export default function Index() {
       info: { midAngle: 0 },
     },
   ]);
-  const width = 640;
-  const height = 400;
 
   // Pie graph
   const topDonut = donutStack[donutStack.length - 1];
@@ -148,45 +146,33 @@ export default function Index() {
 
   return (
     <div style={{ fontFamily: "system-ui, sans-serif", lineHeight: "1.8" }}>
-      <motion.svg width={width} height={height} style={{ display: "block" }}>
-        <motion.g
-          fill="white"
-          stroke="currentColor"
-          strokeWidth="1.5"
-          transform={`translate(${width / 2}, ${height / 2})`}
-        >
-          <Donut
-            enterAngle={topDonut.info.midAngle}
-            exitAngle={topDonut.info.midAngle + Math.PI * 2}
-          >
-            <AnimatePresence mode="popLayout">
-              {pie.map((d, i) => (
-                <HoverDonut
-                  key={topDonut.items[i].id}
-                  startAngle={d.startAngle}
-                  endAngle={d.endAngle}
-                  label={topDonut.items[i].name}
-                  value={String(topDonut.items[i].value)}
-                  color={colors[i % 5]}
-                  onClick={
-                    topDonut.items[i].children
-                      ? (info) => {
-                          setDonutStack((prev) => [
-                            ...prev,
-                            {
-                              items: topDonut.items[i].children!,
-                              info,
-                            },
-                          ]);
-                        }
-                      : undefined
-                  }
-                />
-              ))}
-            </AnimatePresence>
-          </Donut>
-        </motion.g>
-      </motion.svg>
+      <Donut enterAngle={topDonut.info.midAngle}>
+        <AnimatePresence mode="popLayout">
+          {pie.map((d, i) => (
+            <HoverDonut
+              key={topDonut.items[i].id}
+              startAngle={d.startAngle}
+              endAngle={d.endAngle}
+              label={topDonut.items[i].name}
+              value={String(topDonut.items[i].value)}
+              color={colors[i % 5]}
+              onClick={
+                topDonut.items[i].children
+                  ? (info) => {
+                      setDonutStack((prev) => [
+                        ...prev,
+                        {
+                          items: topDonut.items[i].children!,
+                          info,
+                        },
+                      ]);
+                    }
+                  : undefined
+              }
+            />
+          ))}
+        </AnimatePresence>
+      </Donut>
       {donutStack.length > 1 && (
         <button
           onClick={() => {

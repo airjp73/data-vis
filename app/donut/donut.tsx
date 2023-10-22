@@ -1,8 +1,8 @@
 import * as d3 from "d3";
-import type { SpringOptions } from "framer-motion";
+import type { MotionValue, SpringOptions } from "framer-motion";
 import { useTransform, motion, useSpring, useIsPresent } from "framer-motion";
-import type { PropsWithChildren } from "react";
-import { createContext, useContext, useEffect, useMemo } from "react";
+import type { ComponentProps, PropsWithChildren } from "react";
+import { createContext, useContext, useEffect, useMemo, useRef } from "react";
 import invariant from "tiny-invariant";
 
 type DonutDimensions = {
@@ -14,16 +14,22 @@ type DonutDimensions = {
 type DonutTransitionTargets = {
   enterAngle?: number;
 };
-type DonutContextType = DonutDimensions & Partial<DonutTransitionTargets>;
+type DonutContextType = DonutDimensions &
+  Partial<DonutTransitionTargets> & {
+    svgRef: React.RefObject<SVGSVGElement>;
+  };
 
 const DonutContext = createContext<null | DonutContextType>(null);
-const useDonutContext = (compName: string) => {
+export const useDonutContext = (compName: string) => {
   const context = useContext(DonutContext);
   invariant(context, `${compName} must be used within a Donut`);
   return context;
 };
 
-export type DonutProps = PropsWithChildren<Partial<DonutContextType>>;
+export type DonutProps = PropsWithChildren<Partial<DonutContextType>> & {
+  width?: number;
+  height?: number;
+};
 
 export const Donut = ({
   cornerRadius = 4,
@@ -32,7 +38,10 @@ export const Donut = ({
   padAngle = 0.05,
   enterAngle,
   children,
+  width = 300,
+  height = 300,
 }: DonutProps) => {
+  const ref = useRef<SVGSVGElement>(null);
   const value = useMemo<DonutContextType>(
     () => ({
       cornerRadius,
@@ -40,12 +49,21 @@ export const Donut = ({
       outerRadius,
       padAngle,
       enterAngle,
+      svgRef: ref,
     }),
     [cornerRadius, enterAngle, innerRadius, outerRadius, padAngle]
   );
 
   return (
-    <DonutContext.Provider value={value}>{children}</DonutContext.Provider>
+    <svg ref={ref} width={width} height={height} style={{ display: "block" }}>
+      <motion.g
+        stroke="currentColor"
+        strokeWidth="1.5"
+        transform={`translate(${width / 2}, ${height / 2})`}
+      >
+        <DonutContext.Provider value={value}>{children}</DonutContext.Provider>
+      </motion.g>
+    </svg>
   );
 };
 
@@ -53,7 +71,7 @@ export type DonutPieceInfo = {
   midAngle: number;
 };
 
-export type DonutPieceProps = {
+type DonutPieceBaseProps = {
   startAngle: number;
   endAngle: number;
   color: string;
@@ -63,13 +81,27 @@ export type DonutPieceProps = {
   onClick?: (info: DonutPieceInfo) => void;
   onHoverStart?: (info: DonutPieceInfo) => void;
   onHoverEnd?: (info: DonutPieceInfo) => void;
+  spring?: SpringOptions;
+};
+export type DonutPieceProps = DonutPieceBaseProps &
+  Omit<ComponentProps<typeof motion.g>, keyof DonutPieceBaseProps>;
+
+const omit = <T extends object, K extends keyof T>(
+  obj: T,
+  ...keys: K[]
+): Omit<T, K> => {
+  const ret = { ...obj };
+  for (const key of keys) {
+    delete ret[key];
+  }
+  return ret;
 };
 
 export const DonutPiece = (props: DonutPieceProps) => {
   const context = useDonutContext("DonutPiece");
   const scale = props.scale ?? 1;
 
-  const opts: SpringOptions = {
+  const opts: SpringOptions = props.spring ?? {
     damping: 20,
   };
   const innerRadius = useSpring(context.innerRadius, opts);
@@ -128,18 +160,37 @@ export const DonutPiece = (props: DonutPieceProps) => {
   const enterAngle = context.enterAngle ?? 0;
 
   useEffect(() => {
+    const setNormalized = (val: MotionValue<number>, target: number) => {
+      const current = val.get();
+      const diff = target - current;
+      const diffNext = target - (current + Math.PI * 2);
+      const diffPrev = target - (current - Math.PI * 2);
+      const min = Math.min(
+        Math.abs(diff),
+        Math.abs(diffNext),
+        Math.abs(diffPrev)
+      );
+      if (min === Math.abs(diffNext)) {
+        val.jump(current + Math.PI * 2);
+      }
+      if (min === Math.abs(diffPrev)) {
+        val.jump(current - Math.PI * 2);
+      }
+      val.set(target);
+    };
+
     innerRadius.set(context.innerRadius * scale);
     outerRadius.set(context.outerRadius * scale);
     if (isPresent) {
-      startAngle.set(props.startAngle);
-      endAngle.set(props.endAngle);
+      setNormalized(startAngle, props.startAngle);
+      setNormalized(endAngle, props.endAngle);
     } else {
       const exitAngle =
         calc.get().midAngle < enterAngle
           ? enterAngle - Math.PI
           : enterAngle + Math.PI;
-      startAngle.set(exitAngle);
-      endAngle.set(exitAngle);
+      setNormalized(startAngle, exitAngle);
+      setNormalized(endAngle, exitAngle);
     }
   }, [
     calc,
@@ -159,16 +210,14 @@ export const DonutPiece = (props: DonutPieceProps) => {
 
   return (
     <motion.g
+      {...omit(props, "startAngle", "endAngle", "value", "transition")}
       onClick={() => props.onClick?.(getClickInfo())}
       onHoverStart={() => props.onHoverStart?.(getClickInfo())}
       onHoverEnd={() => props.onHoverEnd?.(getClickInfo())}
-      style={
-        props.onClick
-          ? {
-              cursor: "pointer",
-            }
-          : undefined
-      }
+      style={{
+        ...props.style,
+        ...(props.onClick ? { cursor: "pointer" } : {}),
+      }}
     >
       <motion.path
         d={pathData}
