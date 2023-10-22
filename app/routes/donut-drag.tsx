@@ -113,6 +113,8 @@ export default function Index() {
   const pie = d3.pie().sort(null).padAngle(0.3)(items.map((d) => d.value));
   const lastAngle = useRef<number | null>(null);
 
+  const [modal, setModal] = useState<Data | null>(null);
+
   return (
     <div style={{ fontFamily: "system-ui, sans-serif", lineHeight: "1.8" }}>
       <Donut>
@@ -139,6 +141,9 @@ export default function Index() {
             onDragEnd={() => {
               lastAngle.current = null;
             }}
+            onClick={() => {
+              setModal(items[i]);
+            }}
             key={items[i].id}
             startAngle={d.startAngle}
             endAngle={d.endAngle}
@@ -148,6 +153,37 @@ export default function Index() {
           />
         ))}
       </Donut>
+      {!!modal && (
+        <form
+          key={modal.id}
+          onSubmit={(e) => {
+            e.preventDefault();
+            const data = new FormData(e.currentTarget);
+            if (!data.get("name") || !data.get("value")) return;
+            setItems((prev) =>
+              prev.map((item) => {
+                if (item.id !== modal.id) return item;
+                return {
+                  ...item,
+                  name: data.get("name") as string,
+                  value: Number(data.get("value")),
+                };
+              })
+            );
+            setModal(null);
+          }}
+        >
+          <label>
+            Name
+            <input type="text" name="name" defaultValue={modal.name} />
+          </label>
+          <label>
+            Value
+            <input type="number" name="value" defaultValue={modal.value} />
+          </label>
+          <button type="submit">Update</button>
+        </form>
+      )}
     </div>
   );
 }
