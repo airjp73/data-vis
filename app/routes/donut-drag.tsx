@@ -1,7 +1,7 @@
 import type { MetaFunction } from "@remix-run/node";
 import * as d3 from "d3";
 import { useDragControls } from "framer-motion";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { DonutPieceInfo, DonutPieceProps } from "~/donut/donut";
 import { Donut, DonutPiece, useDonutContext } from "~/donut/donut";
 
@@ -41,7 +41,10 @@ const data: Data[] = [
   },
 ];
 
-const DragDonut = (props: DonutPieceProps) => {
+const DragDonut = ({
+  onDrag,
+  ...props
+}: Omit<DonutPieceProps, "onDrag"> & { onDrag: (angle: number) => void }) => {
   const [hovered, setHovered] = useState(false);
   const [dragging, setDragging] = useState(false);
   const controls = useDragControls();
@@ -58,11 +61,15 @@ const DragDonut = (props: DonutPieceProps) => {
         const dy = e.pageY - centerY;
         const angle = Math.atan2(dy, dx) + Math.PI / 2;
         setMidAngle(angle);
+
+        if (angle < 0) onDrag(angle + Math.PI * 2);
+        else if (angle > Math.PI * 2) onDrag(angle - Math.PI * 2);
+        else onDrag(angle);
       };
       window.addEventListener("mousemove", listener);
       return () => window.removeEventListener("mousemove", listener);
     }
-  }, [context.svgRef, dragging]);
+  }, [context.svgRef, dragging, onDrag]);
 
   const originalMidAngle = (props.startAngle + props.endAngle) / 2;
   const angleDiff = midAngle ? originalMidAngle - midAngle : 0;
@@ -83,52 +90,64 @@ const DragDonut = (props: DonutPieceProps) => {
       onDragStart={() => {
         setDragging(true);
       }}
-      onDragEnd={() => {
+      onDragEnd={(...args) => {
         setDragging(false);
         setMidAngle(null);
+        props.onDragEnd?.(...args);
       }}
     />
   );
 };
 
+const colors = ["#ef6f6c", "#465775", "#56e39f", "#59c9a5", "#5b6c5d"];
+
 export default function Index() {
-  const [donutStack, setDonutStack] = useState<
-    { info: DonutPieceInfo; items: Data[] }[]
-  >([
-    {
-      items: data,
-      info: { midAngle: 0 },
-    },
-  ]);
+  const [items, setItems] = useState(
+    data.map((d, i) => ({
+      ...d,
+      color: colors[i % 5],
+    }))
+  );
 
   // Pie graph
-  const topDonut = donutStack[donutStack.length - 1];
-  const pie = d3.pie().padAngle(0.3)(topDonut.items.map((d) => d.value));
-  const colors = ["#ef6f6c", "#465775", "#56e39f", "#59c9a5", "#5b6c5d"];
+  const pie = d3.pie().sort(null).padAngle(0.3)(items.map((d) => d.value));
+  const lastAngle = useRef<number | null>(null);
 
   return (
     <div style={{ fontFamily: "system-ui, sans-serif", lineHeight: "1.8" }}>
-      <Donut enterAngle={topDonut.info.midAngle}>
+      <Donut>
         {pie.map((d, i) => (
           <DragDonut
-            key={topDonut.items[i].id}
+            onDrag={(angle) => {
+              const index = pie.findIndex((item, itemIndex) => {
+                if (lastAngle.current === null) return false;
+                const mid = (item.startAngle + item.endAngle) / 2;
+                return angle < mid !== lastAngle.current! < mid;
+              });
+              lastAngle.current = angle;
+              if (index === -1) return;
+
+              setItems((prev) => {
+                const newItems = [...prev];
+                const dragItem = newItems[i];
+                const swapItem = newItems[index];
+                newItems[i] = swapItem;
+                newItems[index] = dragItem;
+                return newItems;
+              });
+            }}
+            onDragEnd={() => {
+              lastAngle.current = null;
+            }}
+            key={items[i].id}
             startAngle={d.startAngle}
             endAngle={d.endAngle}
-            label={topDonut.items[i].name}
-            value={String(topDonut.items[i].value)}
-            color={colors[i % 5]}
+            label={items[i].name}
+            value={String(items[i].value)}
+            color={items[i].color}
           />
         ))}
       </Donut>
-      {donutStack.length > 1 && (
-        <button
-          onClick={() => {
-            setDonutStack((prev) => prev.slice(0, prev.length - 1));
-          }}
-        >
-          Back
-        </button>
-      )}
     </div>
   );
 }
