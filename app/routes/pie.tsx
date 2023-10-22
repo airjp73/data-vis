@@ -1,6 +1,6 @@
 import type { MetaFunction } from "@remix-run/node";
 import * as d3 from "d3";
-import { useEffect, useState } from "react";
+import { createContext, useContext, useEffect, useState } from "react";
 import invariant from "tiny-invariant";
 import {
   AnimatePresence,
@@ -115,6 +115,7 @@ const arc = d3
   .outerRadius(80)
   .cornerRadius(4)
   .padAngle(0.05);
+
 const a = (start: number, end: number) =>
   arc({
     endAngle: start,
@@ -123,19 +124,33 @@ const a = (start: number, end: number) =>
     outerRadius: 80,
   });
 
+const getMidAngle = (startAngle: number, endAngle: number) =>
+  (startAngle + endAngle) / 2;
+
+const PieContext = createContext<null | {
+  exitAngle: number;
+  parentId: string;
+}>(null);
+
 const Arc = ({
   startAngle,
   endAngle,
   name,
   color,
   value,
+  onClick,
+  id,
 }: {
   startAngle: number;
   endAngle: number;
   name: string;
   color: string;
   value: number;
+  onClick?: () => void;
+  id: string;
 }) => {
+  const context = useContext(PieContext);
+  console.log(context);
   const start = useSpring(0, {
     damping: 25,
   });
@@ -152,13 +167,19 @@ const Arc = ({
 
   useEffect(() => {
     if (!isPresent) {
-      start.set(0);
-      end.set(0);
+      invariant(context);
+      const exitStart =
+        startAngle < context.exitAngle
+          ? context.exitAngle - Math.PI
+          : context.exitAngle + Math.PI;
+      const exitEnd = context.exitAngle + Math.PI;
+      start.set(exitStart);
+      end.set(context.parentId === id ? exitEnd : exitStart);
     }
-  }, [end, isPresent, start]);
+  }, [context, end, id, isPresent, start, startAngle]);
 
   const textPosition = useTransform(() => {
-    const midAngle = (start.get() + end.get()) / 2;
+    const midAngle = getMidAngle(start.get(), end.get());
     const outX = Math.sin(midAngle);
     const outY = -Math.cos(midAngle);
     const center = arc.centroid({
@@ -181,22 +202,27 @@ const Arc = ({
   const amountX = useTransform(textPosition, (v) => v.center[0] - 11);
   const amountY = useTransform(textPosition, (v) => v.center[1]);
 
-  const midAngle = (startAngle + endAngle) / 2;
+  const midAngle = getMidAngle(startAngle, endAngle);
   const outX = Math.sin(midAngle);
   const outY = -Math.cos(midAngle);
 
   return (
     <motion.g
-      whileHover={{
-        translateX: outX * 4,
-        translateY: outY * 4,
-        transition: {
-          type: "spring",
-          stiffness: 400,
-          damping: 25,
-        },
-        fillOpacity: 0.75,
-      }}
+      whileHover={
+        onClick
+          ? {
+              translateX: outX * 4,
+              translateY: outY * 4,
+              transition: {
+                type: "spring",
+                stiffness: 400,
+                damping: 25,
+              },
+              fillOpacity: 0.75,
+            }
+          : undefined
+      }
+      onClick={() => onClick?.()}
     >
       <motion.path
         d={d}
@@ -246,8 +272,22 @@ export default function Index() {
   const height = 400;
 
   // Pie graph
-  const [pie, setPie] = useState(pieData);
+  const pie = pieData;
+  const [parentId, setParentId] = useState<string | null>(null);
   const data = d3.pie().padAngle(0.3)(pie.map((d) => d.value));
+
+  const colors = ["#ef6f6c", "#465775", "#56e39f", "#59c9a5", "#5b6c5d"];
+  const parentIndex = parentId
+    ? pie.findIndex((d) => d.id === parentId)
+    : undefined;
+  const parent = parentIndex !== undefined ? pie[parentIndex] : undefined;
+  const parentColor = parentIndex ? colors[parentIndex % 5] : undefined;
+  const parentData = parentIndex ? data[parentIndex] : undefined;
+  const parentMid = parentData
+    ? getMidAngle(parentData.startAngle, parentData.endAngle)
+    : undefined;
+  const parentStart = parentMid ? parentMid - Math.PI : undefined;
+  const parentEnd = parentMid ? parentMid + Math.PI : undefined;
 
   return (
     <div style={{ fontFamily: "system-ui, sans-serif", lineHeight: "1.8" }}>
@@ -258,20 +298,37 @@ export default function Index() {
           strokeWidth="1.5"
           transform={`translate(${width / 2}, ${height / 2})`}
         >
-          <AnimatePresence mode="popLayout">
-            {data.map((d, i) => (
-              <Arc
-                key={i}
-                startAngle={d.startAngle}
-                endAngle={d.endAngle}
-                name={pie[i].name}
-                value={pie[i].value}
-                color={
-                  ["#ef6f6c", "#465775", "#56e39f", "#59c9a5", "#5b6c5d"][i % 5]
-                }
-              />
-            ))}
-          </AnimatePresence>
+          <PieContext.Provider
+            value={parentId ? { exitAngle: parentMid!, parentId } : null}
+          >
+            <AnimatePresence mode="popLayout" custom={{ custom: parentMid }}>
+              {/* {parent && (
+                <Arc
+                  key={parentId}
+                  color={parentColor!}
+                  startAngle={parentStart!}
+                  endAngle={parentEnd!}
+                  name={parent.name}
+                  value={parent.value}
+                />
+              )} */}
+              {!parent &&
+                data.map((d, i) => (
+                  <Arc
+                    key={pie[i].id}
+                    id={pie[i].id}
+                    startAngle={d.startAngle}
+                    endAngle={d.endAngle}
+                    name={pie[i].name}
+                    value={pie[i].value}
+                    color={colors[i % 5]}
+                    onClick={
+                      pie[i].children ? () => setParentId(pie[i].id) : undefined
+                    }
+                  />
+                ))}
+            </AnimatePresence>
+          </PieContext.Provider>
         </motion.g>
       </motion.svg>
     </div>
