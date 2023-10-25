@@ -2,7 +2,7 @@ import type { MetaFunction } from "@remix-run/node";
 import * as d3 from "d3";
 import { useDragControls } from "framer-motion";
 import { useEffect, useRef, useState } from "react";
-import type { DonutPieceInfo, DonutPieceProps } from "~/donut/donut";
+import type { DonutPieceProps } from "~/donut/donut";
 import { Donut, DonutPiece, useDonutContext } from "~/donut/donut";
 
 export const meta: MetaFunction = () => {

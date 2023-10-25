@@ -1,6 +1,6 @@
 import type { MetaFunction } from "@remix-run/node";
 import * as d3 from "d3";
-import { AnimatePresence, motion } from "framer-motion";
+import { AnimatePresence } from "framer-motion";
 import { useState } from "react";
 import type { DonutPieceInfo, DonutPieceProps } from "~/donut/donut";
 import { Donut, DonutPiece } from "~/donut/donut";
