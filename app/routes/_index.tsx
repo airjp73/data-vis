@@ -127,9 +127,8 @@ export default function Index() {
           fill="none"
           stroke="currentColor"
           strokeWidth="1.5"
-          animate={{
-            d: line(data) ?? undefined,
-          }}
+          initial={{ pathLength: 0, d: line(data) ?? undefined }}
+          animate={{ pathLength: 1, d: line(data) ?? undefined }}
         />
         <motion.g fill="white" stroke="currentColor" strokeWidth="1.5">
           {data.map((d, i) => (
