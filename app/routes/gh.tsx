@@ -1,12 +1,12 @@
-import { json } from "@remix-run/node";
-import { useLoaderData } from "@remix-run/react";
+import { defer, json } from "@remix-run/node";
+import { Await, useLoaderData } from "@remix-run/react";
 import { gql } from "graphql-request";
 import { z } from "zod";
 import * as d3 from "d3";
 import { motion } from "framer-motion";
 import { gh } from "~/gh/client.server";
 import invariant from "tiny-invariant";
-import { Fragment } from "react";
+import { Fragment, Suspense } from "react";
 import { subDays, subYears } from "date-fns";
 
 const ContributionDay = z.object({
@@ -49,44 +49,50 @@ export const loader = async () => {
     }
   `;
 
-  const data: z.infer<typeof ContributionDay>[] = [];
+  const getData = async () => {
+    const data: z.infer<typeof ContributionDay>[] = [];
 
-  let endDate = new Date();
-  let hasActivityInThePast = true;
-  let totalContributions = 0;
+    let endDate = new Date();
+    let hasActivityInThePast = true;
+    let totalContributions = 0;
 
-  while (hasActivityInThePast) {
-    const oneYearAgo = subYears(endDate, 1);
-    const res = ContributesResponse.parse(
-      await gh.request(query, {
-        userName: "airjp73",
-        startDate: oneYearAgo.toISOString(),
-        endDate: endDate.toISOString(),
-      })
-    );
-    data.unshift(
-      ...res.user.contributionsCollection.contributionCalendar.weeks.flatMap(
-        (week) => week.contributionDays
-      )
-    );
+    while (hasActivityInThePast) {
+      const oneYearAgo = subYears(endDate, 1);
+      const res = ContributesResponse.parse(
+        await gh.request(query, {
+          userName: "airjp73",
+          startDate: oneYearAgo.toISOString(),
+          endDate: endDate.toISOString(),
+        })
+      );
+      data.unshift(
+        ...res.user.contributionsCollection.contributionCalendar.weeks.flatMap(
+          (week) => week.contributionDays
+        )
+      );
 
-    hasActivityInThePast =
-      res.user.contributionsCollection.hasActivityInThePast;
-    endDate = subDays(oneYearAgo, 1);
-    totalContributions +=
-      res.user.contributionsCollection.contributionCalendar.totalContributions;
-  }
+      hasActivityInThePast =
+        res.user.contributionsCollection.hasActivityInThePast;
+      endDate = subDays(oneYearAgo, 1);
+      totalContributions +=
+        res.user.contributionsCollection.contributionCalendar
+          .totalContributions;
+    }
+    return {
+      data,
+      totalContributions,
+    };
+  };
 
-  return json({
-    data,
-    totalContributions,
-  });
+  return defer({ res: getData() });
 };
 
 type ArrayItem<T> = T extends Array<infer U> ? U : never;
-export default function Gh() {
-  const { data, totalContributions } = useLoaderData<typeof loader>();
 
+function Gh({
+  data,
+  totalContributions,
+}: Awaited<ReturnType<typeof useLoaderData<typeof loader>>["res"]>) {
   const width = 640;
   const height = 400;
   const marginTop = 20;
@@ -209,5 +215,19 @@ export default function Gh() {
         </motion.g> */}
       </motion.svg>
     </>
+  );
+}
+
+export default function GhPage() {
+  const { res } = useLoaderData<typeof loader>();
+
+  return (
+    <Suspense fallback={<div>Loading...</div>}>
+      <Await resolve={res}>
+        {({ data, totalContributions }) => (
+          <Gh data={data} totalContributions={totalContributions} />
+        )}
+      </Await>
+    </Suspense>
   );
 }
