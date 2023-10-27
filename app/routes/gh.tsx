@@ -112,8 +112,14 @@ function Gh({
   const yBounds = d3.extent(data, (d) => d.contributionCount);
   invariant(xBounds[0] != null && xBounds[1] != null);
   invariant(yBounds[0] != null && yBounds[1] != null);
-  const x = d3.scaleLinear(xBounds, [marginLeft, width - marginRight]);
-  const y = d3.scaleLinear(yBounds, [height - marginBottom, marginTop]);
+  const x = d3
+    .scaleLinear()
+    .domain(xBounds)
+    .range([marginLeft, width - marginRight]);
+  const y = d3
+    .scaleLinear()
+    .domain(yBounds)
+    .range([height - marginBottom, marginTop]);
 
   const line = d3.line<ArrayItem<typeof data>>(
     (d) => x(new Date(d.date).getTime()),
