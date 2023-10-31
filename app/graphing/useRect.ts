@@ -1,8 +1,11 @@
-import { useLayoutEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useState } from "react";
+
+const useIsomorphicEffect =
+  typeof window !== "undefined" ? useLayoutEffect : useEffect;
 
 export const useRect = (el: React.RefObject<HTMLElement | SVGElement>) => {
   const [rect, setRect] = useState<DOMRect | null>(null);
-  useLayoutEffect(() => {
+  useIsomorphicEffect(() => {
     const observer = new ResizeObserver((entries) => {
       setRect(entries[0].contentRect);
     });
